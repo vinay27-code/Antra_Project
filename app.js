@@ -1,4 +1,5 @@
 const api = "https://dummyjson.com/todos";
+const key = "todos";
 
 const form = document.getElementById("todoForm");
 const input = document.getElementById("todoInput");
@@ -8,13 +9,35 @@ const doneList = document.getElementById("doneList");
 let todos = [];
 let editId = null;
 
+function saveData() {
+  localStorage.setItem(key, JSON.stringify(todos));
+}
+
+function loadData() {
+  const saved = localStorage.getItem(key);
+
+  if (saved) {
+    todos = JSON.parse(saved);
+    render();
+    return true;
+  }
+
+  return false;
+}
+
 async function getTodos() {
-  const res = await fetch(api);
-  const data = await res.json();
+  if (loadData()) return;
 
-  todos = data.todos.slice(0, 10);
+  try {
+    const res = await fetch(api);
+    const data = await res.json();
 
-  render();
+    todos = data.todos.slice(0, 10);
+    saveData();
+    render();
+  } catch (err) {
+    console.log(err);
+  }
 }
 
 function render() {
@@ -58,81 +81,98 @@ function render() {
 }
 
 async function addTodo(txt) {
-  const res = await fetch(`${api}/add`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      todo: txt,
-      completed: false,
-      userId: 1
-    })
-  });
+  try {
+    const res = await fetch(`${api}/add`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        todo: txt,
+        completed: false,
+        userId: 1
+      })
+    });
 
-  const data = await res.json();
+    const data = await res.json();
 
-  todos.unshift(data);
-
-  render();
+    todos.unshift(data);
+    saveData();
+    render();
+  } catch (err) {
+    console.log(err);
+  }
 }
 
 async function delTodo(id) {
-  await fetch(`${api}/${id}`, {
-    method: "DELETE"
-  });
+  try {
+    await fetch(`${api}/${id}`, {
+      method: "DELETE"
+    });
 
-  todos = todos.filter(t => t.id !== id);
-
-  render();
+    todos = todos.filter(t => t.id !== id);
+    saveData();
+    render();
+  } catch (err) {
+    console.log(err);
+  }
 }
 
 async function moveTodo(id) {
   const item = todos.find(t => t.id === id);
 
-  const res = await fetch(`${api}/${id}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      completed: !item.completed
-    })
-  });
+  try {
+    const res = await fetch(`${api}/${id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        completed: !item.completed
+      })
+    });
 
-  const data = await res.json();
+    const data = await res.json();
 
-  todos = todos.map(t =>
-    t.id === id
-      ? { ...t, completed: data.completed }
-      : t
-  );
+    todos = todos.map(t =>
+      t.id === id
+        ? { ...t, completed: data.completed }
+        : t
+    );
 
-  render();
+    saveData();
+    render();
+  } catch (err) {
+    console.log(err);
+  }
 }
 
 async function saveTodo(id, txt) {
-  const res = await fetch(`${api}/${id}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      todo: txt
-    })
-  });
+  try {
+    const res = await fetch(`${api}/${id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        todo: txt
+      })
+    });
 
-  const data = await res.json();
+    const data = await res.json();
 
-  todos = todos.map(t =>
-    t.id === id
-      ? { ...t, todo: data.todo }
-      : t
-  );
+    todos = todos.map(t =>
+      t.id === id
+        ? { ...t, todo: data.todo }
+        : t
+    );
 
-  editId = null;
-
-  render();
+    editId = null;
+    saveData();
+    render();
+  } catch (err) {
+    console.log(err);
+  }
 }
 
 function clickList(e) {
@@ -159,8 +199,7 @@ function clickList(e) {
 
   if (act === "save") {
     const box = li.querySelector(".edit-box");
-
-    saveTodo(id, box.value);
+    saveTodo(id, box.value.trim());
   }
 }
 
@@ -175,7 +214,6 @@ form.addEventListener("submit", e => {
   if (!txt) return;
 
   addTodo(txt);
-
   input.value = "";
 });
 
