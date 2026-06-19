@@ -9,49 +9,49 @@ const doneList = document.getElementById("doneList");
 let todos = [];
 let editId = null;
 
-function saveData() {
+function esc(txt) {
+  return String(txt)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function save() {
   localStorage.setItem(key, JSON.stringify(todos));
 }
 
-function loadData() {
-  const saved = localStorage.getItem(key);
-
-  if (saved) {
-    todos = JSON.parse(saved);
-    render();
-    return true;
-  }
-
-  return false;
-}
-
-async function getTodos() {
-  if (loadData()) return;
-
+function load() {
   try {
-    const res = await fetch(api);
-    const data = await res.json();
+    const raw = localStorage.getItem(key);
 
-    todos = data.todos.slice(0, 10);
-    saveData();
-    render();
-  } catch (err) {
-    console.log(err);
+    if (!raw) return false;
+
+    const data = JSON.parse(raw);
+
+    if (!Array.isArray(data)) return false;
+
+    todos = data;
+    return true;
+  } catch {
+    localStorage.removeItem(key);
+    return false;
   }
 }
 
-function render() {
+function paint() {
   pendList.innerHTML = "";
   doneList.innerHTML = "";
 
   todos.forEach(t => {
     const li = document.createElement("li");
     li.className = "item";
-    li.dataset.id = t.id;
+    li.dataset.id = String(t.id);
 
-    if (editId === t.id) {
+    if (editId === String(t.id)) {
       li.innerHTML = `
-        <input class="edit-box" value="${t.todo}">
+        <input class="edit-box" value="${esc(t.todo)}" />
         <div class="btns">
           <button data-act="save">✓</button>
           <button data-act="del">🗑</button>
@@ -59,13 +59,9 @@ function render() {
       `;
     } else {
       li.innerHTML = `
-        <span>${t.todo}</span>
-
+        <span>${esc(t.todo)}</span>
         <div class="btns">
-          <button data-act="move">
-            ${t.completed ? "←" : "→"}
-          </button>
-
+          <button data-act="move">${t.completed ? "←" : "→"}</button>
           <button data-act="edit">✎</button>
           <button data-act="del">🗑</button>
         </div>
@@ -80,9 +76,38 @@ function render() {
   });
 }
 
-async function addTodo(txt) {
+async function boot() {
+  if (load()) {
+    paint();
+    return;
+  }
+
   try {
-    const res = await fetch(`${api}/add`, {
+    const res = await fetch(api);
+    const data = await res.json();
+
+    todos = (data.todos || []).slice(0, 10);
+    save();
+    paint();
+  } catch (err) {
+    console.log(err);
+  }
+}
+
+async function addTodo(txt) {
+  const temp = {
+    id: String(Date.now()),
+    todo: txt,
+    completed: false,
+    userId: 1
+  };
+
+  todos.unshift(temp);
+  save();
+  paint();
+
+  try {
+    await fetch(`${api}/add`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -93,63 +118,61 @@ async function addTodo(txt) {
         userId: 1
       })
     });
-
-    const data = await res.json();
-
-    todos.unshift(data);
-    saveData();
-    render();
   } catch (err) {
     console.log(err);
   }
 }
 
 async function delTodo(id) {
+  todos = todos.filter(t => String(t.id) !== String(id));
+  save();
+  paint();
+
   try {
     await fetch(`${api}/${id}`, {
       method: "DELETE"
     });
-
-    todos = todos.filter(t => t.id !== id);
-    saveData();
-    render();
   } catch (err) {
     console.log(err);
   }
 }
 
 async function moveTodo(id) {
-  const item = todos.find(t => t.id === id);
+  const item = todos.find(t => String(t.id) === String(id));
+  if (!item) return;
+
+  item.completed = !item.completed;
+  save();
+  paint();
 
   try {
-    const res = await fetch(`${api}/${id}`, {
+    await fetch(`${api}/${id}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        completed: !item.completed
+        completed: item.completed
       })
     });
-
-    const data = await res.json();
-
-    todos = todos.map(t =>
-      t.id === id
-        ? { ...t, completed: data.completed }
-        : t
-    );
-
-    saveData();
-    render();
   } catch (err) {
     console.log(err);
   }
 }
 
 async function saveTodo(id, txt) {
+  if (!txt) return;
+
+  const item = todos.find(t => String(t.id) === String(id));
+  if (!item) return;
+
+  item.todo = txt;
+  editId = null;
+  save();
+  paint();
+
   try {
-    const res = await fetch(`${api}/${id}`, {
+    await fetch(`${api}/${id}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json"
@@ -158,30 +181,19 @@ async function saveTodo(id, txt) {
         todo: txt
       })
     });
-
-    const data = await res.json();
-
-    todos = todos.map(t =>
-      t.id === id
-        ? { ...t, todo: data.todo }
-        : t
-    );
-
-    editId = null;
-    saveData();
-    render();
   } catch (err) {
     console.log(err);
   }
 }
 
-function clickList(e) {
+function onClick(e) {
   const btn = e.target.closest("button");
-
   if (!btn) return;
 
   const li = btn.closest("li");
-  const id = Number(li.dataset.id);
+  if (!li) return;
+
+  const id = li.dataset.id;
   const act = btn.dataset.act;
 
   if (act === "del") {
@@ -193,8 +205,8 @@ function clickList(e) {
   }
 
   if (act === "edit") {
-    editId = id;
-    render();
+    editId = String(id);
+    paint();
   }
 
   if (act === "save") {
@@ -203,18 +215,17 @@ function clickList(e) {
   }
 }
 
-pendList.addEventListener("click", clickList);
-doneList.addEventListener("click", clickList);
+pendList.addEventListener("click", onClick);
+doneList.addEventListener("click", onClick);
 
 form.addEventListener("submit", e => {
   e.preventDefault();
 
   const txt = input.value.trim();
-
   if (!txt) return;
 
   addTodo(txt);
   input.value = "";
 });
 
-getTodos();
+boot();
