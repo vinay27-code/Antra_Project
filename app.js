@@ -5,6 +5,8 @@ const form = document.getElementById("todoForm");
 const input = document.getElementById("todoInput");
 const pendList = document.getElementById("pendList");
 const doneList = document.getElementById("doneList");
+const pendCount = document.getElementById("pendCount");
+const doneCount = document.getElementById("doneCount");
 
 let todos = [];
 let editId = null;
@@ -43,6 +45,9 @@ function load() {
 function paint() {
   pendList.innerHTML = "";
   doneList.innerHTML = "";
+
+  pendCount.textContent = todos.filter(t => !t.completed).length;
+  doneCount.textContent = todos.filter(t => t.completed).length;
 
   todos.forEach(t => {
     const li = document.createElement("li");
